@@ -31,7 +31,7 @@ class AStarPathfinder:
         self.potential_field = self.create_potential_field()
         
 
-    def preprocess_map(self, map_array: np.array) -> np.array:
+    def preprocess_map(self, map_array: np.array) -> np.array: #
         """
         Ajusta o mapa, convertendo valores intermediários para obstáculos.
 
@@ -41,31 +41,46 @@ class AStarPathfinder:
         Returns:
             np.array: Mapa processado.
         """
-        return None
+        mapa_processado = map_array.copy()
+        # 0: obstáculo - mantém o RGB preto do original
+        mapa_processado[mapa_processado == 128] = 1 # posição desconhecida
+        mapa_processado[mapa_processado == 255] = 2 # posição conhecida
+        return mapa_processado
 
     def create_potential_field(self) -> np.array:
         """
         Gera campo potencial com base na distância de obstáculos.
+        Penaliza muito mais aggressivamente pontos próximos a paredes.
 
         Returns:
-            np.array: Campo potencial.
+            np.array: Campo potencial (alto perto de paredes, baixo longe).
         """
-        return None
+        distancia = distance_transform_edt(self.map_array != 0)
+        # Penalidade inversamente proporcional ao quadrado da distância
+        # Muito alta perto de paredes, cai rápido longe delas
+        campo_potencial = (self.wall_influence ** 3) / np.maximum(distancia, 1) ** 2
+        return campo_potencial
 
+# RAFA
     def heuristic(self, a: tuple, b: tuple) -> float:
         """
-        Calcula a heurística entre dois pontos.
+        Calcula a heurística entre dois pontos com forte penalidade de parede.
 
         Args:
             a (tuple): Ponto A.
             b (tuple): Ponto B.
 
         Returns:
-            float: Resultado da heurística.
+            float: Distância ao objetivo + forte penalidade de proximidade a parede.
         """
+        # distance_to_goal = math.dist(a, b)
+        # # Penalidade muito forte baseada no campo potencial
+        # field_penalty = self.potential_field[a[0], a[1]] * 10
+        # return distance_to_goal + field_penalty
+        
+        return math.dist(a, b)
 
-        return None
-
+#RAFA
     def find_path(self):
         """
         Executa o algoritmo A* para encontrar caminho até o objetivo.
@@ -74,6 +89,64 @@ class AStarPathfinder:
             dict: Predecessores dos nós no caminho. Se o caminho não for encontrado, retorna None.
             tuple: O ponto final (objetivo) ou None se não encontrado.
         """
+        start = self.start
+        goal = self.goal
+
+        # Estrutura A*
+        open_set = []
+        heapq.heappush(open_set, (0, start))
+
+        # came_from eh o dicionário dos predecessores
+        came_from = {}
+        g_score = {start: 0}
+        f_score = {start: self.heuristic(start, goal)}
+
+        open_set_hash = {start}
+
+        # Movimentos permitidos: cima, baixo, esquerda e direita
+        neighbors_moves = [
+            (-1, 0),
+            (1, 0),
+            (0, -1),
+            (0, 1)
+        ]
+
+        while open_set:
+            _, current = heapq.heappop(open_set)
+            open_set_hash.remove(current)
+
+            # Chegou no objetivo
+            if current == goal:
+                return came_from, current
+
+            x, y = current
+
+            for dx, dy in neighbors_moves:
+                nx, ny = x + dx, y + dy
+
+                # Verifica limites do mapa
+                if nx < 0 or ny < 0 or nx >= self.map.shape[0] or ny >= self.map.shape[1]:
+                    continue
+
+                # Soh anda em área livre
+                if self.map[nx, ny] == 0:
+                    continue
+
+                neighbor = (nx, ny)
+
+                # Custo base (1) + penalidade forte por proximidade a parede
+                base_cost = 1.0
+                wall_penalty = self.potential_field[nx, ny] * 100
+                tentative_g_score = g_score[current] + base_cost + wall_penalty
+
+                if tentative_g_score < g_score.get(neighbor, float("inf")):
+                    came_from[neighbor] = current
+                    g_score[neighbor] = tentative_g_score
+                    f_score[neighbor] = tentative_g_score + self.heuristic(neighbor, goal)
+
+                    if neighbor not in open_set_hash:
+                        heapq.heappush(open_set, (f_score[neighbor], neighbor))
+                        open_set_hash.add(neighbor)
 
         print("Caminho não encontrado")
         return None, None
@@ -89,7 +162,12 @@ class AStarPathfinder:
         Returns:
             list: Lista de tuplas com caminho reconstruído.
         """
-        return None
+        path = [current]
+        while current in came_from:
+            current = came_from[current]
+            path.append(current)
+        path.reverse()
+        return path
 
     def know_path(self, path: list) -> list:
         """
@@ -101,7 +179,17 @@ class AStarPathfinder:
         Returns:
             list: Caminho ajustado.
         """
-        return None
+        if path is None:
+            return None
+        
+        # Mantém apenas pontos em área conhecida (2).
+        known_path = []
+        for point in path:
+            x, y = point
+            if self.map_array[x, y] == 2:
+                known_path.append(point)
+        
+        return known_path[:-10] if known_path else None
 
     def simplify_path(self, path: list) -> list:
         """
@@ -113,7 +201,31 @@ class AStarPathfinder:
         Returns:
             list: Caminho simplificado.
         """
-        return None
+        if path is None or len(path) <= 2:
+            return path
+        
+        simplified = [path[0]]
+        
+        for i in range(1, len(path) - 1):
+            current = path[i]
+            prev = simplified[-1]
+            next_point = path[i + 1]
+            
+            # Check if three points are collinear using cross product
+            # If cross product is 0, they are collinear and middle point can be removed
+            dx1 = current[0] - prev[0]
+            dy1 = current[1] - prev[1]
+            dx2 = next_point[0] - current[0]
+            dy2 = next_point[1] - current[1]
+            
+            cross_product = dx1 * dy2 - dy1 * dx2
+            
+            # Keep the point if it's not collinear (not a straight line)
+            if cross_product != 0:
+                simplified.append(current)
+        
+        simplified.append(path[-1])
+        return simplified
 
     def plot_path(self, path: list, simplified_path: list):
         """
@@ -122,9 +234,8 @@ class AStarPathfinder:
         Args:
             path (list): O caminho completo encontrado.
             simplified_path (list): O caminho simplificado encontrado.
+            valid_path (list): O caminho válido encontrado.
         """
-        simplified_path = self.simplify_path(path)
-
         plt.figure(figsize=(10, 10))
         plt.imshow(self.map, cmap='gray')
         plt.scatter(self.start[1], self.start[0], color='green', s=100, label='Início')
@@ -140,7 +251,7 @@ class AStarPathfinder:
 
         plt.legend()
         plt.axis('equal')
-        plt.show()
+        plt.savefig('path.png')
 
     def run(self, show_path=True):
         """
@@ -201,8 +312,16 @@ def prep_map(map_path: str) -> np.array:
 
 def main():
     map_array = prep_map('map5.pgm')
-    astar = AStarPathfinder(map_array, (60, 20), (60, 120), wall_influence=10.0, buffer_factor=3.0)
-    astar.run()
+    print(f"Tamanho do mapa após processamento: {map_array.shape}")
+    print(f"Valores únicos no mapa: {np.unique(map_array)}")
+    print("Mapa processado:")
+    plt.imshow(map_array, cmap='gray')
+    plt.title("Mapa Processado")
+    plt.axis('equal')
+    plt.imsave('processed_map.png', map_array, cmap='gray')
+
+    candidate = AStarPathfinder(map_array, (55, 10), (8, 138), wall_influence=5.0, buffer_factor=1.0)
+    candidate.run()
 
 
 if __name__ == '__main__':
