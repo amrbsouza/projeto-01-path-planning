@@ -61,7 +61,6 @@ class AStarPathfinder:
         campo_potencial = (self.wall_influence ** 3) / np.maximum(distancia, 1) ** 2
         return campo_potencial
 
-# RAFA
     def heuristic(self, a: tuple, b: tuple) -> float:
         """
         Calcula a heurística entre dois pontos com forte penalidade de parede.
@@ -80,7 +79,6 @@ class AStarPathfinder:
         
         return math.dist(a, b)
 
-#RAFA
     def find_path(self):
         """
         Executa o algoritmo A* para encontrar caminho até o objetivo.
@@ -189,7 +187,7 @@ class AStarPathfinder:
             if self.map_array[x, y] == 2:
                 known_path.append(point)
         
-        return known_path[:-10] if known_path else None
+        return known_path[:-3] if known_path else None
 
     def simplify_path(self, path: list) -> list:
         """
@@ -236,6 +234,7 @@ class AStarPathfinder:
             simplified_path (list): O caminho simplificado encontrado.
             valid_path (list): O caminho válido encontrado.
         """
+        simplified_path = self.simplify_path(path)
         plt.figure(figsize=(10, 10))
         plt.imshow(self.map, cmap='gray')
         plt.scatter(self.start[1], self.start[0], color='green', s=100, label='Início')
@@ -252,6 +251,7 @@ class AStarPathfinder:
         plt.legend()
         plt.axis('equal')
         plt.savefig('path.png')
+        plt.show()
 
     def run(self, show_path=True):
         """
@@ -320,7 +320,7 @@ def main():
     plt.axis('equal')
     plt.imsave('processed_map.png', map_array, cmap='gray')
 
-    candidate = AStarPathfinder(map_array, (55, 10), (8, 138), wall_influence=5.0, buffer_factor=1.0)
+    candidate = AStarPathfinder(map_array, (60, 20), (60, 120))
     candidate.run()
 
 
